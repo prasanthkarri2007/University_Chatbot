@@ -11,6 +11,7 @@ from rag.answer_grounding import is_answer_grounded
 from rag.number_guard import numbers_exist_in_context
 
 from concurrent.futures import ThreadPoolExecutor
+import re
 
 
 
@@ -19,9 +20,10 @@ from concurrent.futures import ThreadPoolExecutor
 # -----------------------
 
 llm = OllamaLLM(
-    model="phi3"
+    model="phi3",
+    temperature=0,
+    num_predict=120
 )
-
 
 # -----------------------
 # Main Chat Function
@@ -126,9 +128,9 @@ def ask_ai(question: str) -> None:
     # Step 7: Build Context
     # -----------------------
 
-    context = filter_sentences(question, docs)
+    context = "\n\n".join([doc.page_content for doc in docs])
 
-    MAX_CONTEXT = 2500
+    MAX_CONTEXT = 1500
     context = context[:MAX_CONTEXT]
 
     if context.strip() == "":
@@ -158,19 +160,14 @@ def ask_ai(question: str) -> None:
     prompt = f"""
 You are a professional AI assistant for Chandigarh University.
 
-Answer questions ONLY using the provided context.
-
 RULES:
-1. Use ONLY the context information.
-2. Do NOT guess or invent information.
-3. If the answer is missing from the context, reply exactly:
 
+1. Answer ONLY using the context.
+2. If a number (like package/salary) is found → include it in a complete sentence.
+3. Keep answer SHORT (1 sentence only).
+4. Do NOT add extra explanation.
+5. If not found → say exactly:
 "I could not find that information in the university knowledge base."
-
-4. If numbers are mentioned (packages, fees, percentages), copy them exactly.
-
-Conversation History:
-{history}
 
 Context:
 {context}
@@ -259,13 +256,32 @@ Answer:
     # Step 16: Save Memory
     # -----------------------
 
+    
+    if "package" in question.lower():
+
+        matches = re.findall(r'(\d+\.?\d*)\s*(crore|cr|lakh|lpa)', context.lower())
+
+        max_value = 0
+        best_match = None
+
+        for num, unit in matches:
+            num = float(num)
+
+        # Normalize everything to LPA for comparison
+            if unit in ["crore", "cr"]:
+                value = num * 100   # 1 crore = 100 LPA
+            elif unit == "lakh":
+                value = num / 100   # lakh → LPA
+            else:
+                value = num         # already LPA
+
+            if value > max_value:
+                max_value = value
+                best_match = f"{num} {unit}".upper()
+
+        if best_match:
+            answer = f"The highest package in Chandigarh University is {best_match}."
+
     add_message(question, answer)
+    return answer, sources
 
-    # -----------------------
-    # Step 17: Show Sources
-    # -----------------------
-
-    print("\nSources:")
-
-    for source in sources:
-        print("•", source)

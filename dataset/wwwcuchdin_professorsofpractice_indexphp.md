@@ -1,3 +1,0 @@
-# Source: https://www.cuchd.in/professors-of-practice/index.php
-
-Offered in Highest Package Offered Highest Package Offered Delivering Excellence in Mentoring Delivering a Unique Practical Learning Experience Mentors currently associated with Chandigarh University Chandigarh University NH-05 Chandigarh-Ludhiana Highway, Mohali, Punjab (INDIA) Chandigarh University, Panjab (CU) is the Best University in Punjab and North India that offers various Undergraduate and Post graduate Courses like B.Tech, BCA, BBA, HMCT, B.Com, LLB, B.Arch, MBA, M.Tech, B.Com, M.Com, Journalism and MCA at an affordable fees in Chandigarh, India. Apply Now at India's Best Private University in Punjab, Chandigarh which provides top placements. © All rights reserved 2025

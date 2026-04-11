@@ -1,3 +1,0 @@
-# Source: https://www.cuchd.in/campus-life/canadian-alumni-meet.php
-
-Offered in Batch 2024-25 Highest Package Offered Highest Package Offered Reuniting with our family in North America Chandigarh University NH-05 Chandigarh-Ludhiana Highway, Mohali, Punjab (INDIA) Chandigarh University, Panjab (CU) is the Best University in Punjab and North India that offers various Undergraduate and Post graduate Courses like B.Tech, BCA, BBA, HMCT, B.Com, LLB, B.Arch, MBA, M.Tech, B.Com, M.Com, Journalism and MCA at an affordable fees in Chandigarh, India. Apply Now at India's Best Private University in Punjab, Chandigarh which provides top placements. © All rights reserved 2025 ₹200 Crore in Scholarships Await!
