@@ -1,14 +1,24 @@
-from langchain_ollama import OllamaLLM
+from langchain_groq import ChatGroq
+import os
 
-verifier_llm = OllamaLLM(model="phi3")
+# Load verifier LLM
+verifier_llm = ChatGroq(
+    model="llama3-8b-8192",
+    temperature=0,
+    api_key=os.getenv("GROQ_API_KEY")
+)
 
 
-def verify_answer(question, context, answer):
+def verify_answer(question: str, context: str, answer: str) -> bool:
 
     prompt = f"""
 You are a strict fact-checking AI.
 
 Check whether the answer is fully supported by the provided context.
+
+Rules:
+- Respond ONLY with VALID or INVALID
+- Do NOT explain anything
 
 Question:
 {question}
@@ -18,12 +28,12 @@ Context:
 
 Answer:
 {answer}
-
-Rules:
-- If the answer is supported by the context, respond ONLY with: VALID
-- If the answer contains information not present in the context, respond ONLY with: INVALID
 """
 
-    result = verifier_llm.invoke(prompt)
+    try:
+        result = verifier_llm.invoke(prompt).content.strip().upper()
 
-    return "VALID" in result.upper()
+        return result == "VALID"
+
+    except Exception:
+        return False

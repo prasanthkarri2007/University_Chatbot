@@ -1,23 +1,32 @@
-from langchain_ollama import OllamaLLM
+def decompose_query(question: str):
 
-llm = OllamaLLM(model="phi3")
+    q = question.lower().strip()
 
+    queries = []
 
-def decompose_query(question):
+    # Split based on common connectors
+    if " and " in q:
+        parts = q.split(" and ")
+    elif " or " in q:
+        parts = q.split(" or ")
+    elif "," in q:
+        parts = q.split(",")
+    else:
+        parts = [q]
 
-    prompt = f"""
-Break the following question into smaller search queries
-that help retrieve university information.
+    # Clean parts
+    for part in parts:
+        part = part.strip()
+        if part:
+            queries.append(part)
 
-Question:
-{question}
+    # Add CU context if missing
+    final_queries = []
 
-Return each query on a new line.
-Do not number them.
-"""
+    for q in queries:
+        if "chandigarh university" not in q and "cu" not in q:
+            final_queries.append(f"chandigarh university {q}")
+        else:
+            final_queries.append(q)
 
-    response = llm.invoke(prompt)
-
-    queries = [q.strip() for q in response.split("\n") if q.strip()]
-
-    return queries
+    return list(set(final_queries))[:3]

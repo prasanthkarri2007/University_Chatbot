@@ -1,31 +1,24 @@
-from langchain_ollama import OllamaLLM
+def rewrite_query(question: str) -> str:
 
-llm = OllamaLLM(model="phi3")
+    q = question.lower().strip()
 
-def rewrite_query(question):
+    # Remove unnecessary filler words
+    stop_words = [
+        "what", "is", "the", "of", "in", "for",
+        "tell", "me", "about", "please", "give",
+        "details", "can", "you"
+    ]
 
-    prompt = f"""
-Convert the following student question into a short search query.
+    words = [w for w in q.split() if w not in stop_words]
 
-Rules:
-- Maximum 8 words
-- No explanation
-- Only return the search query
+    # Join back
+    rewritten = " ".join(words)
 
-Question:
-{question}
+    # Add CU context if missing
+    if "chandigarh university" not in rewritten and "cu" not in rewritten:
+        rewritten = "chandigarh university " + rewritten
 
-Search Query:
-"""
+    # Limit to max 8 words
+    rewritten = " ".join(rewritten.split()[:8])
 
-    try:
-        rewritten = llm.invoke(prompt).strip()
-
-        # safety check
-        if len(rewritten.split()) > 8:
-            return question
-
-        return rewritten
-
-    except:
-        return question
+    return rewritten

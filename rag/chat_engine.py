@@ -1,4 +1,3 @@
-from langchain_ollama import OllamaLLM
 from rag.memory import add_message, get_recent_history
 from rag.reranker import rerank
 from rag.query_rewriter import rewrite_query
@@ -11,49 +10,49 @@ from rag.answer_grounding import is_answer_grounded
 from rag.number_guard import numbers_exist_in_context
 
 from concurrent.futures import ThreadPoolExecutor
+from langchain_groq import ChatGroq
+import os
 import re
 
 
-
 # -----------------------
-# Load LLM
+# Load LLM (Groq)
 # -----------------------
 
-llm = OllamaLLM(
-    model="phi3",
+llm = ChatGroq(
+    model="llama3-8b-8192",
     temperature=0,
-    num_predict=120
+    api_key=os.getenv("GROQ_API_KEY")
 )
+
 
 # -----------------------
 # Main Chat Function
 # -----------------------
 
-def ask_ai(question: str) -> None:
+def ask_ai(question: str):
 
     # -----------------------
-    # Step 1: Query Rewrite (only if needed)
+    # Step 1: Query Rewrite
     # -----------------------
 
     rewritten_query = question
-
     if len(question.split()) < 6:
         rewritten_query = rewrite_query(question)
 
     # -----------------------
-    # Step 2: Multi Query Generation
+    # Step 2: Multi Query
     # -----------------------
 
     queries = generate_queries(rewritten_query)
 
     # -----------------------
-    # Step 3: Query Decomposition
+    # Step 3: Decompose Query
     # -----------------------
 
     sub_queries = decompose_query(rewritten_query)
 
-    # Limit total queries
-    all_queries = list(set((queries + sub_queries)[:4]))
+    all_queries = list(set((queries + sub_queries)[:3]))  # reduced for speed
 
     # -----------------------
     # Step 4: Parallel Retrieval
@@ -67,27 +66,24 @@ def ask_ai(question: str) -> None:
         except:
             return []
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         results = executor.map(retrieve, all_queries)
 
     for r in results:
         docs.extend(r)
 
-    if len(docs) == 0:
-        print("No documents retrieved.")
-        return
+    if not docs:
+        return "I could not find that information in the university knowledge base.", []
 
     # -----------------------
-    # Step 5: Remove Duplicate Docs
+    # Step 5: Remove Duplicates
     # -----------------------
 
     unique_docs = {}
 
     for doc in docs:
-        if hasattr(doc, "page_content"):
-            unique_docs[doc.page_content] = doc
-        else:
-            unique_docs[str(doc)] = doc
+        content = doc.page_content if hasattr(doc, "page_content") else str(doc)
+        unique_docs[content] = doc
 
     docs = list(unique_docs.values())
 
@@ -96,78 +92,59 @@ def ask_ai(question: str) -> None:
     # -----------------------
 
     scored_docs = rerank(
-    rewritten_query + " highest package placement salary offer",
-    docs,
-    top_k=5,
-    return_scores=True
-)
+        rewritten_query,
+        docs,
+        top_k=5,
+        return_scores=True
+    )
 
     if not scored_docs:
-        print("No documents retrieved after reranking.")
-        return
+        return "I could not find that information in the university knowledge base.", []
 
-    # Calculate average confidence
     avg_score = sum(score for _, score in scored_docs) / len(scored_docs)
 
-    # Adaptive document selection
     if avg_score > 0.75:
-        docs = [doc for doc, score in scored_docs[:3]]
-
+        docs = [doc for doc, _ in scored_docs[:3]]
     elif avg_score > 0.55:
-        docs = [doc for doc, score in scored_docs[:6]]
-
+        docs = [doc for doc, _ in scored_docs[:5]]
     else:
-        docs = [doc for doc, score in scored_docs[:10]]
-
-    if not scored_docs:
-        print("No documents retrieved after reranking.")
-        return
-
+        docs = [doc for doc, _ in scored_docs[:7]]
 
     # -----------------------
     # Step 7: Build Context
     # -----------------------
 
-    context = "\n\n".join([doc.page_content for doc in docs])
+    context = filter_sentences(rewritten_query, docs)
 
-    MAX_CONTEXT = 1500
-    context = context[:MAX_CONTEXT]
+    context = context[:1500]
 
-    if context.strip() == "":
-        print("No relevant context retrieved.")
-        return
+    if not context.strip():
+        return "I could not find that information in the university knowledge base.", []
 
     # -----------------------
     # Step 8: Extract Sources
     # -----------------------
 
     sources = set()
-
     for doc in docs:
         if hasattr(doc, "metadata"):
             sources.add(doc.metadata.get("source", "Unknown"))
 
     # -----------------------
-    # Step 9: Conversation Memory
-    # -----------------------
-
-    history = get_recent_history()
-
-    # -----------------------
-    # Step 10: Prompt
+    # Step 9: Prompt
     # -----------------------
 
     prompt = f"""
-You are a professional AI assistant for Chandigarh University.
+You are a smart and helpful AI assistant for Chandigarh University.
 
-RULES:
+Answer the question using ONLY the provided context.
 
-1. Answer ONLY using the context.
-2. If a number (like package/salary) is found → include it in a complete sentence.
-3. Keep answer SHORT (1 sentence only).
-4. Do NOT add extra explanation.
-5. If not found → say exactly:
-"I could not find that information in the university knowledge base."
+Rules:
+- Give a clear and complete sentence
+- Be natural and human-like
+- Do NOT just return numbers
+- If answer is not found, say:
+  "I don't have that information based on the available data."
 
 Context:
 {context}
@@ -178,85 +155,38 @@ Question:
 Answer:
 """
 
-# -----------------------
-# Step 11: Stream Response
-# -----------------------
-
-    answer = ""
+    # -----------------------
+    # Step 10: LLM Call (Groq)
+    # -----------------------
 
     try:
-        print("\nAnswer:\n")
-
-        for chunk in llm.stream(prompt):
-            print(chunk, end="", flush=True)
-            answer += chunk
-
+        answer = llm.invoke(prompt).content.strip()
     except Exception as e:
         print("LLM error:", e)
-        return
-
-    print("\n")
+        return "Error generating answer.", []
 
     # -----------------------
-    # Step 12: Verify Answer
+    # Step 11: Verification
     # -----------------------
 
     try:
-        is_valid = verify_answer(question, context, answer)
+        if not verify_answer(question, context, answer):
+            return "I could not find that information in the university knowledge base.", []
 
-        if not is_valid:
-            answer = "I could not find that information in the university knowledge base."
-            print("\nAnswer:\n")
-            print(answer)
-            return
-
-        # -----------------------
-        # Step 13: Grounding Check
-        # -----------------------
-
-        grounded = is_answer_grounded(answer, context)
-
-        if not grounded:
-            answer = "I could not find that information in the university knowledge base."
-            print("\nAnswer:\n")
-            print(answer)
-            return
-
-        # -----------------------
-        # Step 14: Numeric Fact Guard
-        # -----------------------
+        if not is_answer_grounded(answer, context):
+            return "I could not find that information in the university knowledge base.", []
 
         if not numbers_exist_in_context(answer, context):
-            answer = "I could not find that information in the university knowledge base."
-            print("\nAnswer:\n")
-            print(answer)
-            return
+            return "I could not find that information in the university knowledge base.", []
 
     except Exception as e:
         print("Verification error:", e)
-        answer = "I could not find that information in the university knowledge base."
-        print("\nAnswer:\n")
-        print(answer)
-        return
+        return "I could not find that information in the university knowledge base.", []
 
     # -----------------------
-    # Step 15: Print Answer
+    # Step 12: Smart Package Fix 🔥
     # -----------------------
 
-    print("\n" + "="*50)
-    print("🎓 Chandigarh University AI Assistant")
-    print("="*50)
-
-    print("\nAnswer:\n")
-    print(answer.strip())
-
-    print("\n" + "="*50)
-
-    # -----------------------
-    # Step 16: Save Memory
-    # -----------------------
-
-    
     if "package" in question.lower():
 
         matches = re.findall(r'(\d+\.?\d*)\s*(crore|cr|lakh|lpa)', context.lower())
@@ -267,13 +197,12 @@ Answer:
         for num, unit in matches:
             num = float(num)
 
-        # Normalize everything to LPA for comparison
             if unit in ["crore", "cr"]:
-                value = num * 100   # 1 crore = 100 LPA
+                value = num * 100
             elif unit == "lakh":
-                value = num / 100   # lakh → LPA
+                value = num / 100
             else:
-                value = num         # already LPA
+                value = num
 
             if value > max_value:
                 max_value = value
@@ -282,6 +211,14 @@ Answer:
         if best_match:
             answer = f"The highest package in Chandigarh University is {best_match}."
 
-    add_message(question, answer)
-    return answer, sources
+    # -----------------------
+    # Step 13: Save Memory
+    # -----------------------
 
+    add_message(question, answer)
+
+    # -----------------------
+    # Step 14: Return
+    # -----------------------
+
+    return answer, list(sources)
